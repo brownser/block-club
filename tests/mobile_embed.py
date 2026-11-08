@@ -59,6 +59,10 @@ async def run():
         reloaded=json.loads(await page.evaluate("localStorage.getItem('blockclub.game.v1')"))
         assert reloaded==saved,'simulated restart did not restore saved game'
         checks.append('Autosave after dice roll and restore from preserved browser storage on fresh app load')
+        # Dice/cards may legitimately leave an informational modal in the saved state.
+        # Dismiss it before opening the portfolio; this is not a gameplay failure.
+        if await page.locator('.detail-sheet').count():
+          await page.locator('.detail-sheet [data-act=close]').click()
         # Portfolio is interactive on a resumed game.
         await page.locator('[data-act=portfolio]').first.click()
         assert await page.locator('.detail-sheet').count()==1
