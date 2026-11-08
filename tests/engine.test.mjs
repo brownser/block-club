@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {TILES, newGame, step, rentAt, assetsOf, ownsGroup, canBuild, canMortgage, canTrade, netWorth, aiMove} from '../engine.mjs';
+
+const p=(opts={})=>newGame({name:'Tester',bots:1,mode:'classic',...opts});
+test('board has exactly 40 valid squares, all ownable squares have prices',()=>{assert.equal(TILES.length,40);for(const [i,t] of TILES.entries()){assert.ok(t.name,`tile ${i} missing name`);if(['property','utility','rail'].includes(t.type))assert.ok(Number.isFinite(t.price)&&t.price>0,`tile ${i} missing price`);}});
+test('new game starts with one player plus chosen AI rivals and no owners',()=>{const g=p({bots:3});assert.equal(g.players.length,4);assert.ok(g.players.every(x=>x.cash===1500));assert.equal(assetsOf(g,0).length,0);});
+test('passing Start collects 200 and an unowned property can be purchased',()=>{let g=p();g.players[0].position=39;g=step(g,{type:'roll',dice:[1,1]});assert.equal(g.players[0].position,1);assert.equal(g.players[0].cash,1700);assert.equal(g.phase,'offer');g=step(g,{type:'buy',tile:1});assert.equal(g.assets[1].owner,0);assert.equal(g.players[0].cash,1640);assert.equal(g.phase,'roll');});
+test('property ownership charges rent to another player and pays owner',()=>{let g=p();g.assets[1].owner=1;g=step(g,{type:'roll',dice:[1,0]});assert.equal(g.phase,'roll'); // invalid dice rejects
+ g=step(g,{type:'roll',dice:[1,1]}); // lands on community on square 2; controlled alternative next
+ g=p();g.assets[3].owner=1;g=step(g,{type:'roll',dice:[1,2]});assert.equal(g.phase,'end');assert.equal(g.players[0].cash,1496);assert.equal(g.players[1].cash,1504);
+});
+test('rail and utility rent use owned count and dice total',()=>{let g=p();g.assets[5].owner=0;assert.equal(rentAt(g,5),25);g.assets[15].owner=0;assert.equal(rentAt(g,5),50);g.assets[12].owner=1;assert.equal(rentAt(g,12,9),36);g.assets[28].owner=1;assert.equal(rentAt(g,12,9),90);});
+test('full color set enables balanced building and higher rents',()=>{let g=p();g.assets[1].owner=0;g.assets[3].owner=0;assert.ok(ownsGroup(g,0,0));assert.equal(rentAt(g,1),4);assert.ok(canBuild(g,0,1));g=step(g,{type:'manage',pid:0,tile:1,kind:'build'});assert.equal(g.assets[1].level,1);assert.equal(g.players[0].cash,1450);assert.ok(!canBuild(g,0,1));assert.ok(canBuild(g,0,3));assert.ok(!canMortgage(g,0,3));});
+test('mortgage and redemption cash flow is accurate',()=>{let g=p();g.assets[1].owner=0;g=step(g,{type:'manage',pid:0,tile:1,kind:'mortgage'});assert.equal(g.players[0].cash,1530);assert.equal(rentAt(g,1),0);g=step(g,{type:'manage',pid:0,tile:1,kind:'unmortgage'});assert.equal(g.players[0].cash,1497);assert.equal(g.assets[1].mortgaged,false);});
+test('three doubles in one turn send player directly to jail',()=>{let g=p();g.players[0].position=37;g=step(g,{type:'roll',dice:[1,1]});assert.equal(g.phase,'offer');g=step(g,{type:'buy',tile:39});assert.equal(g.phase,'roll');g=step(g,{type:'roll',dice:[2,2]});assert.equal(g.phase,'offer');g=step(g,{type:'buy',tile:3});assert.equal(g.phase,'roll');g=step(g,{type:'roll',dice:[3,3]});assert.equal(g.players[0].position,10);assert.equal(g.players[0].jailed,true);assert.equal(g.phase,'end');});
+test('auction awards highest bidder, transfers cash, and does not reward a passed player',()=>{let g=p();g=step(g,{type:'roll',dice:[1,2]});g=step(g,{type:'decline'});assert.equal(g.phase,'auction');let pid=g.auction.turn;g=step(g,{type:'auction',pid,kind:'bid',amount:50});assert.equal(g.phase,'auction');assert.equal(g.auction.leader,pid);pid=g.auction.turn;g=step(g,{type:'auction',pid,kind:'pass'});assert.equal(g.phase,'end');assert.equal(g.assets[3].owner,0);assert.equal(g.players[0].cash,1450);});
+test('debt can be settled after mortgaging property',()=>{let g=p();g.assets[1].owner=0;g.assets[3].owner=1;g.players[0].cash=1;g=step(g,{type:'roll',dice:[1,2]});assert.equal(g.phase,'debt');g=step(g,{type:'manage',pid:0,tile:1,kind:'mortgage'});assert.equal(g.players[0].cash,31);g=step(g,{type:'settleDebt'});assert.equal(g.phase,'end');assert.equal(g.players[0].cash,27);assert.equal(g.players[1].cash,1504);});
+test('Jail gets out on doubles with no extra roll',()=>{let g=p();g.players[0].jailed=true;g.players[0].position=10;g.phase='jail';g=step(g,{type:'jailRoll',dice:[3,3]});assert.equal(g.players[0].jailed,false);assert.equal(g.players[0].position,16);assert.equal(g.phase,'offer');g=step(g,{type:'buy',tile:16});assert.equal(g.phase,'end');});
+test('property-for-property cash trade updates both deeds and balances',()=>{
+ let g=p();g.assets[1].owner=0;g.assets[3].owner=1;
+ const next=step(g,{type:'trade',other:1,giveTile:1,takeTile:3,giveCash:500,takeCash:0});
+ assert.equal(next.assets[1].owner,1);assert.equal(next.assets[3].owner,0);
+ assert.equal(next.players[0].cash,1000);assert.equal(next.players[1].cash,2000);
+ assert.equal(next.notice.kind,'trade');assert.equal(next.notice.title,'Deal done');
+});
+test('invalid trade is rejected without changing ownership or cash',()=>{
+ let g=p();g.assets[1].owner=0;g.assets[3].owner=1;
+ const next=step(g,{type:'trade',other:1,giveTile:3,takeTile:1,giveCash:0,takeCash:0});
+ assert.equal(next.assets[1].owner,0);assert.equal(next.assets[3].owner,1);
+ assert.equal(next.players[0].cash,1500);assert.equal(next.players[1].cash,1500);
+});
+test('quick game crowns a net-worth winner at round limit',()=>{let g=newGame({bots:1,mode:'quick'});g.round=12;g.current=1;g.phase='end';g.players[0].cash=2000;g=step(g,{type:'end'});assert.equal(g.phase,'finished');assert.equal(g.winner,0);});
+test('opponent AI can finish many complete games with no negative cash or hung phases',()=>{for(let trial=0;trial<9;trial++){let g=newGame({bots:2,mode:'quick'});g.players[0].bot=true;let i=0;for(;i<4500&&g.phase!=='finished';i++){const a=aiMove(g);assert.ok(a,`no AI action in ${g.phase} trial=${trial} iter=${i}`);g=step(g,a);if(a.markBuilt)g.aiBuiltThisTurn=true;for(const pl of g.players)assert.ok(Number.isFinite(pl.cash)&&pl.cash>=0,`bad cash: ${pl.name}=${pl.cash}`);for(const x of g.assets)assert.ok(x.owner===null||(x.owner>=0&&x.owner<g.players.length));}assert.ok(g.phase==='finished',`trial=${trial} stuck at ${g.phase}`);assert.ok(g.winner!==null);}}
+);

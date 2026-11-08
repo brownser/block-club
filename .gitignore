@@ -1,0 +1,8 @@
+site/
+node_modules/
+.DS_Store
+*.log
+__pycache__/
+.pytest_cache/
+tests/*-verified.png
+tests/android-launch.png
