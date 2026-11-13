@@ -32,6 +32,16 @@ GitHub Pages sites are typically **publicly accessible even with a private repos
 
 Generate the minimal static site and place `site/` under the document root of an HTTPS static server such as Caddy or Nginx. See `ops/Caddyfile.example` (not deployed). This provides more security header control, but also requires maintaining TLS, DNS, availability and backups. **Do not use any machine or domain subject to an existing hold.**
 
+## Local development
+
+Requires **Node 18+** and **Python 3**. There are no npm dependencies, so there is no install step.
+
+`npm run serve` starts a static server for the unbuilt source at <http://localhost:8000/> (it runs `python3 -m http.server 8000`). Use it rather than opening `index.html` from disk: the page loads `styles.css` and `app.mjs` as separate files, and browsers block ES modules on `file://`.
+
+`localhost` counts as a secure context, so the service worker registers there — `app.mjs` gates registration on `https:` or the `localhost`/`127.0.0.1` hostnames. That is enough for local iteration; installability and offline behaviour still require the real HTTPS origin and remain release acceptance gates.
+
+Commands for tests and builds are in the next section.
+
 ## Build, tests and source
 
 - `npm test` — pure rules-engine tests and isolated service-worker simulation (Node 18+; no dependency install needed).
