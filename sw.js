@@ -1,5 +1,5 @@
 // BLOCK CLUB offline shell: isolate caches per app path on a shared origin (GitHub Pages).
-const VERSION = '1.0.1';
+const VERSION = '1.1.0';
 const APP_URLS = ['./', './index.html', './styles.css', './engine.mjs', './app.mjs',
   './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png', './apple-icon.png'];
 const ROOT = self.registration.scope;

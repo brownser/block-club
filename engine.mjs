@@ -112,8 +112,15 @@ function checkWinner(s){const active=s.players.filter(p=>!p.bankrupt);if(active.
  if(s.mode==='quick' && s.round>s.roundLimit){s.phase='finished';s.winner=[...active].sort((a,b)=>netWorth(s,b.id)-netWorth(s,a.id))[0].id;s.notice={title:'Final bell',detail:`${s.players[s.winner].name} wins on net worth!`,kind:'win'};return true;}
  return false;
 }
-export function newGame({name='You',bots=2,mode='quick'}={}){const safe=(String(name).trim().slice(0,16)||'You');const players=[{id:0,name:safe,bot:false},...['Marlow','Sage','Arden'].slice(0,Math.min(3,Math.max(1,bots))).map((n,i)=>({id:i+1,name:n,bot:true}))].map(p=>({...p,cash:1500,position:0,jailed:false,jailTurns:0,freeCards:0,doubles:0,bankrupt:false}));
- return {version:VERSION,players,assets:TILES.map(()=>({owner:null,level:0,mortgaged:false})),mode,roundLimit:12,round:1,current:0,phase:'roll',dice:[1,1],diceTotal:0,rollExtra:false,landed:null,notice:null,debt:null,auction:null,deckFortune:randomShuffle([...FORTUNE.keys()]),deckCommunity:randomShuffle([...COMMUNITY.keys()]),drawFortune:0,drawCommunity:0,log:[{msg:'The city is open for business.',at:1}],winner:null,aiBuiltThisTurn:false,lastAction:'start',turnCount:0};
+export function newGame({name='You',bots=2,mode='quick',humanNames=null,roundLimit=12}={}){
+ const rawNames=Array.isArray(humanNames)&&humanNames.length?humanNames.slice(0,4):[name];
+ const count=Math.min(4,Math.max(1,rawNames.length));
+ const botCount=Math.min(4-count,Math.max(0,Number.isInteger(bots)?bots:2));
+ if(count+botCount<2)throw new RangeError('Two to four players are required');
+ const humans=rawNames.slice(0,count).map((n,i)=>({id:i,name:(String(n??'').trim().slice(0,16)||`Player ${i+1}`),bot:false}));
+ const opponents=['Marlow','Sage','Arden'].slice(0,botCount).map((n,i)=>({id:count+i,name:n,bot:true}));
+ const players=[...humans,...opponents].map(p=>({...p,cash:1500,position:0,jailed:false,jailTurns:0,freeCards:0,doubles:0,bankrupt:false}));
+ return {version:VERSION,players,assets:TILES.map(()=>({owner:null,level:0,mortgaged:false})),mode:mode==='classic'?'classic':'quick',roundLimit:[6,12,20,30].includes(roundLimit)?roundLimit:12,round:1,current:0,phase:'roll',dice:[1,1],diceTotal:0,rollExtra:false,landed:null,notice:null,debt:null,auction:null,deckFortune:randomShuffle([...FORTUNE.keys()]),deckCommunity:randomShuffle([...COMMUNITY.keys()]),drawFortune:0,drawCommunity:0,log:[{msg:'The city is open for business.',at:1}],winner:null,aiBuiltThisTurn:false,lastAction:'start',turnCount:0,tradeOffer:null,tradeReturnPhase:null};
 }
 function finishLanding(s){if(s.phase==='finished'||s.phase==='debt')return;s.phase=s.rollExtra?'roll':'end';}
 function pay(s,pid,amount,creditor=null,reason='payment'){amount=Math.max(0,Math.floor(amount));const p=s.players[pid];if(amount===0)return true;if(p.cash>=amount){p.cash-=amount;if(creditor!==null && !s.players[creditor].bankrupt)s.players[creditor].cash+=amount;addLog(s,`${p.name} paid $${amount.toLocaleString()}${creditor!==null?' to '+s.players[creditor].name:''} · ${reason}`);return true;}
@@ -177,13 +184,44 @@ function resolveDebt(s){const d=s.debt;if(!d)return false;const p=s.players[d.pi
 }
 function bankrupt(s){const d=s.debt,p=s.players[d.pid];p.bankrupt=true;p.cash=0;p.jailed=false;for(const i of assetsOf(s,p.id)){s.assets[i].owner=d.creditor;s.assets[i].level=0;if(d.creditor===null)s.assets[i].mortgaged=false;}s.debt=null;s.auction=null;addLog(s,`${p.name} declared bankruptcy.`);if(!checkWinner(s)){s.phase='end';s.rollExtra=false;}}
 function tradeValue(s,pid,i){if(i===null)return 0;const t=TILES[i];let val=t.price;if(t.type==='property'){const owned=groupTiles(t.group).filter(x=>s.assets[x].owner===pid).length;val*=owned===groupTiles(t.group).length-1?1.75:1.15;}return Math.round(val);}
-function trade(s,action){const {other,giveTile,takeTile,giveCash,takeCash}=action;const p=s.players[s.current],q=s.players[Number(other)],gc=Number(giveCash)||0,tc=Number(takeCash)||0;const gi=giveTile==null?null:Number(giveTile),ti=takeTile==null?null:Number(takeTile);if(p.bot||!q||q.id===p.id||q.bankrupt||!(gi!==null||ti!==null)||![gc,tc].every(x=>Number.isInteger(x)&&x>=0))return;
- if(gi!==null&&!canTrade(s,p.id,gi))return;if(ti!==null&&!canTrade(s,q.id,ti))return;if(p.cash<gc||q.cash<tc)return;
- const offer=gc+tradeValue(s,q.id,gi)-tc-tradeValue(s,q.id,ti);
- const acceptance=offer>=(ti!==null&&TILES[ti].type==='property'&&ownsGroup(s,q.id,TILES[ti].group)?100:0) + (ti===null?0:Math.round(tradeValue(s,q.id,ti)*0.08));
- if(acceptance){p.cash=p.cash-gc+tc;q.cash=q.cash-tc+gc;if(gi!==null)s.assets[gi].owner=q.id;if(ti!==null)s.assets[ti].owner=p.id;addLog(s,`${p.name} and ${q.name} completed a trade.`);s.notice={title:'Deal done',detail:`${q.name} accepted the trade.`,kind:'trade'};}
+function tradeTerms(s,from,other,giveTile,takeTile,giveCash,takeCash){
+ const p=s.players[from],q=s.players[other];
+ if(!p||!q||from===other||p.bankrupt||q.bankrupt||p.bot)return null;
+ const gi=giveTile==null?null:Number(giveTile),ti=takeTile==null?null:Number(takeTile);
+ const gc=Number(giveCash),tc=Number(takeCash);
+ if(gi===null&&ti===null)return null;
+ if(![gc,tc].every(x=>Number.isSafeInteger(x)&&x>=0))return null;
+ if(gi!==null&&(!Number.isInteger(gi)||!canTrade(s,from,gi)))return null;
+ if(ti!==null&&(!Number.isInteger(ti)||!canTrade(s,other,ti)))return null;
+ if(p.cash<gc||q.cash<tc)return null;
+ return {from,other,giveTile:gi,takeTile:ti,giveCash:gc,takeCash:tc};
+}
+function performTrade(s,t){const p=s.players[t.from],q=s.players[t.other];
+ p.cash=p.cash-t.giveCash+t.takeCash;q.cash=q.cash-t.takeCash+t.giveCash;
+ if(t.giveTile!==null)s.assets[t.giveTile].owner=q.id;
+ if(t.takeTile!==null)s.assets[t.takeTile].owner=p.id;
+ addLog(s,`${p.name} and ${q.name} completed a trade.`);
+ s.notice={title:'Deal done',detail:`${q.name} accepted the trade.`,kind:'trade'};
+}
+function trade(s,action){
+ const p=s.players[s.current],other=Number(action.other);
+ const t=tradeTerms(s,p.id,other,action.giveTile,action.takeTile,action.giveCash??0,action.takeCash??0);
+ if(!t)return;
+ const q=s.players[other];
+ if(!q.bot){s.tradeOffer=t;s.tradeReturnPhase=s.phase;s.phase='tradeOffer';addLog(s,`${p.name} offered ${q.name} a trade.`);return;}
+ const offer=t.giveCash+tradeValue(s,q.id,t.giveTile)-t.takeCash-tradeValue(s,q.id,t.takeTile);
+ const acceptance=offer>=(t.takeTile!==null&&TILES[t.takeTile].type==='property'&&ownsGroup(s,q.id,TILES[t.takeTile].group)?100:0) + (t.takeTile===null?0:Math.round(tradeValue(s,q.id,t.takeTile)*0.08));
+ if(acceptance)performTrade(s,t);
  else{s.notice={title:'Offer declined',detail:`${q.name} wants a better deal.`,kind:'trade'};addLog(s,`${q.name} declined ${p.name}'s trade.`);}
 }
+function respondToTrade(s,action){
+ const t=s.tradeOffer;if(!t||action.pid!==t.other||s.players[t.other].bot)return;
+ const valid=tradeTerms(s,t.from,t.other,t.giveTile,t.takeTile,t.giveCash,t.takeCash);
+ if(action.type==='tradeAccept'&&valid)performTrade(s,valid);
+ else{addLog(s,`${s.players[t.other].name} declined the trade.`);s.notice={title:'Offer declined',detail:'No properties or cash changed hands.',kind:'trade'};}
+ s.phase=['roll','end'].includes(s.tradeReturnPhase)?s.tradeReturnPhase:'end';s.tradeOffer=null;s.tradeReturnPhase=null;
+}
+
 function nextTurn(s){const old=s.current;for(let n=1;n<=s.players.length;n++){const target=(old+n)%s.players.length;if(!s.players[target].bankrupt){s.current=target;if(target<=old)s.round++;break;}}
  s.rollExtra=false;s.landed=null;s.notice=null;s.dice=[1,1];s.diceTotal=0;s.aiBuiltThisTurn=false;s.offer=null;s.turnCount++;s.players[s.current].doubles=0;
  if(checkWinner(s))return;
@@ -197,6 +235,7 @@ export function step(input,action){const s=clone(input);if(!s||s.version!==VERSI
  if(cmd==='dismissNotice'){s.notice=null;return s;}
  if(cmd==='manage'&&['roll','jail','end','offer','debt'].includes(s.phase)&&action.pid===s.current){changeProperty(s,action);return s;}
  if(cmd==='trade'&&['roll','end'].includes(s.phase)){trade(s,action);return s;}
+ if(s.phase==='tradeOffer'&&['tradeAccept','tradeDecline'].includes(cmd)){respondToTrade(s,action);return s;}
  if(cmd==='settleDebt'&&s.phase==='debt'){resolveDebt(s);return s;}
  if(cmd==='bankrupt'&&s.phase==='debt'&&s.debt.pid===action.pid){bankrupt(s);return s;}
  if(cmd==='roll'&&s.phase==='roll'){const d=Array.isArray(action.dice)?action.dice:[Math.ceil(Math.random()*6),Math.ceil(Math.random()*6)];if(d.some(x=>!Number.isInteger(x)||x<1||x>6))return s;takeRoll(s,d[0],d[1]);return s;}
@@ -217,7 +256,8 @@ export function step(input,action){const s=clone(input);if(!s||s.version!==VERSI
  if(s.phase==='end'&&cmd==='end'){nextTurn(s);return s;}
  return s;
 }
-export function currentHumanDecision(s){if(s.phase==='finished')return false;if(s.phase==='auction')return !s.players[s.auction.turn].bot;if(s.phase==='debt')return !s.players[s.debt.pid].bot;return !s.players[s.current].bot;}
+export function actingPlayerId(s){if(s.phase==='auction')return s.auction.turn;if(s.phase==='debt')return s.debt.pid;if(s.phase==='tradeOffer')return s.tradeOffer.other;return s.current;}
+export function currentHumanDecision(s){return s.phase!=='finished'&&!s.players[actingPlayerId(s)].bot;}
 export function aiMove(s){if(s.phase==='finished'||currentHumanDecision(s)||s.notice?.kind==='win')return null;const p=s.players[s.current];
  if(s.phase==='debt'){const d=s.debt;if(p.cash>=d.amount)return {type:'settleDebt'};const candidates=assetsOf(s,p.id);for(const i of candidates){if(canSell(s,p.id,i))return {type:'manage',pid:p.id,tile:i,kind:'sell'};}for(const i of candidates){if(canMortgage(s,p.id,i))return {type:'manage',pid:p.id,tile:i,kind:'mortgage'};}return {type:'bankrupt',pid:p.id};}
  if(s.phase==='auction'){const a=s.auction,bot=s.players[a.turn];if(!bot.bot)return null;const t=TILES[a.tile];const groupBoost=t.type==='property'&&groupTiles(t.group).filter(i=>s.assets[i].owner===bot.id).length===groupTiles(t.group).length-1?1.4:1;
@@ -232,3 +272,42 @@ export function aiMove(s){if(s.phase==='finished'||currentHumanDecision(s)||s.no
  return null;
 }
 export function summary(s){return s.players.map(p=>({name:p.name,netWorth:netWorth(s,p.id),cash:p.cash,properties:assetsOf(s,p.id).length,bankrupt:p.bankrupt}));}
+
+// Strict, non-executable save validation. Compatible with version-1 1.0.0/1.0.1 saves.
+export function normalizeGameSnapshot(value){
+ if(!value||typeof value!=='object'||Array.isArray(value)||value.version!==VERSION)return null;
+ let s;try{s=JSON.parse(JSON.stringify(value));}catch{return null;}
+ const validInt=(n,min,max)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
+ if(!Array.isArray(s.players)||s.players.length<2||s.players.length>4||!Array.isArray(s.assets)||s.assets.length!==40)return null;
+ if(!validInt(s.current,0,s.players.length-1)||!validInt(s.round,1,1000000)||!['quick','classic'].includes(s.mode))return null;
+ if(!['roll','jail','offer','auction','debt','end','finished','tradeOffer'].includes(s.phase))return null;
+ if(!s.players.every((p,i)=>p&&p.id===i&&typeof p.name==='string'&&p.name.length<=64&&typeof p.bot==='boolean'&&Number.isSafeInteger(p.cash)&&p.cash>=0&&p.cash<=100000000&&validInt(p.position,0,39)&&typeof p.jailed==='boolean'&&typeof p.bankrupt==='boolean'&&validInt(p.jailTurns,0,1000)&&validInt(p.doubles,0,3)&&validInt(p.freeCards,0,100)))return null;
+ if(!s.players.some(p=>!p.bot))return null;
+ if(!s.assets.every(a=>a&&((a.owner===null)||validInt(a.owner,0,s.players.length-1))&&validInt(a.level,0,5)&&typeof a.mortgaged==='boolean'))return null;
+ if(!Array.isArray(s.dice)||s.dice.length!==2||!s.dice.every(n=>validInt(n,1,6)))return null;
+ if(!Array.isArray(s.log)||s.log.length>100||!s.log.every(x=>x&&typeof x.msg==='string'&&x.msg.length<1000&&validInt(x.at,1,1000000)))return null;
+ if(!['null','object'].includes(typeof s.notice) || (s.notice!==null&&(!s.notice||typeof s.notice.title!=='string'||typeof s.notice.detail!=='string')))return null;
+ if(s.phase==='offer'&&!validInt(s.offer,0,39))return null;
+ if(s.phase==='auction'&&(!s.auction||!validInt(s.auction.turn,0,s.players.length-1)||!validInt(s.auction.tile,0,39)||!Array.isArray(s.auction.bidders)||!Array.isArray(s.auction.passed)||!Array.isArray(s.auction.history)))return null;
+ if(s.phase==='debt'&&(!s.debt||!validInt(s.debt.pid,0,s.players.length-1)||!validInt(s.debt.amount,0,100000000)))return null;
+ if(s.phase==='tradeOffer'&&(!s.tradeOffer||!validInt(s.tradeOffer.from,0,s.players.length-1)||s.tradeOffer.from!==s.current||!validInt(s.tradeOffer.other,0,s.players.length-1)||s.tradeOffer.other===s.current||s.players[s.tradeOffer.other].bot||!['roll','end'].includes(s.tradeReturnPhase)))return null;
+ if(s.phase==='tradeOffer'&&!tradeTerms(s,s.tradeOffer.from,s.tradeOffer.other,s.tradeOffer.giveTile,s.tradeOffer.takeTile,s.tradeOffer.giveCash,s.tradeOffer.takeCash))return null;
+ if(!Array.isArray(s.deckFortune)||s.deckFortune.length!==FORTUNE.length||!s.deckFortune.every(x=>validInt(x,0,FORTUNE.length-1)))return null;
+ if(!Array.isArray(s.deckCommunity)||s.deckCommunity.length!==COMMUNITY.length||!s.deckCommunity.every(x=>validInt(x,0,COMMUNITY.length-1)))return null;
+ if(!validInt(s.drawFortune,0,1000000)||!validInt(s.drawCommunity,0,1000000))return null;
+ if(s.phase==='finished'&&s.winner!==null&&!validInt(s.winner,0,s.players.length-1))return null;
+ s.roundLimit=[6,12,20,30].includes(s.roundLimit)?s.roundLimit:12;
+ s.turnCount=validInt(s.turnCount,0,1000000)?s.turnCount:0;
+ s.tradeOffer??=null;s.tradeReturnPhase??=null;
+ return s;
+}
+export function encodePortableSave(game,settings={}){
+ const clean=normalizeGameSnapshot(game);if(!clean)throw new TypeError('Invalid game state');
+ return JSON.stringify({format:'blockclub-save',saveVersion:1,game:clean,settings:{sound:settings.sound!==false,motion:settings.motion!==false}});
+}
+export function decodePortableSave(input){
+ let data;try{data=typeof input==='string'?JSON.parse(input):input;}catch{return null;}
+ if(!data||data.format!=='blockclub-save'||data.saveVersion!==1)return null;
+ const game=normalizeGameSnapshot(data.game);if(!game)return null;
+ return {game,settings:{sound:data.settings?.sound!==false,motion:data.settings?.motion!==false}};
+}
