@@ -6,7 +6,7 @@
 - 3/3 generated release-artifact tests passed: ten allowlisted static assets, CSP and PWA metadata.
 - 6/6 new headless Chrome Game Night UI checks passed: two human players and no AI, private handoffs, cross-context JSON save portability, human trade consent and return handoff, motion toggle, and horizontal-fit checks at 320/390/412/1280 px.
 - 8/8 original isolated Chromium mobile tests passed in the separate test environment; 1.0.1 rules and storage compatibility remain regression targets.
-- Generated single-file `play.html` checked at 107,769 bytes; SHA-256 `4082849715828dcd2bc998a770685052358bfc3db1db21c7c68b38aad5382fb5` in both isolated build environments. The HTML file is not committed or included in the hosted bundle.
+- Generated single-file `play.html` checked at 107,777 bytes; SHA-256 `a2c8f98e333d8ff3efa91e0aabf653fdc96b20868c8db98e13b7bf529db96864` in both isolated build environments. The HTML file is not committed or included in the hosted bundle.
 - Browser UI verification uses a controlled embedded standalone page with simulated localStorage because sandbox file/localhost navigation can be restricted. This is not a real Android or HTTP/PWA test.
 - **Still unverified:** Android direct-file browsing, real-device shared-phone interactions and persistence, home-screen installation, airplane-mode reopening, and live HTTPS security headers. Release and merge are not authorized by these tests.
 
