@@ -1,14 +1,16 @@
 # BLOCK CLUB — Own the City
 
-**Release candidate 1.0.1 · November 8, 2026**
+**Game Night Edition 1.1.0 · November 17, 2026 — review candidate, not deployed**
 
-An original, mobile-first, Monopoly-style property strategy game. No account, backend, ad network, third-party JavaScript, tracking scripts, or Vercel. One human plays 1–3 AI opponents. Includes a 40-space board, offers, auctions, property/cash trading, mortgages, buildings, jail, cards, bankruptcy, short and classic modes, and local autosave.
+An original, mobile-first, Monopoly-style property strategy game. No account, backend, ad network, third-party JavaScript, tracking scripts, or Vercel. One to four humans can share the device alongside optional AI, with two to four total players. Includes a 40-space board, offers, auctions, property/cash trading, mortgages, buildings, jail, cards, bankruptcy, short and classic modes, local autosave, portable save export/import, configurable round limits, private turn handoffs, and optional animations.
 
 The game is designed for an HTTPS Progressive Web App (PWA) installed from Android Chrome or Samsung Internet. It also ships as a self-contained HTML file for offline use in browsers that permit opening local HTML files.
 
 ## Status
 
-**Ready to review; not deployed.** The package includes an approval-gated, manually triggered GitHub Pages workflow. No public repository, website, production infrastructure change, or release has been created. **Do not deploy on existing Zeus or Lucy production hosts while their holds remain in effect.** See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) and [QA_EVIDENCE.md](QA_EVIDENCE.md) for evidence and unverified device checks.
+**Version 1.1 remains a review candidate; not deployed.** The package includes an approval-gated, manually triggered GitHub Pages workflow. No public repository, website, production infrastructure change, or release has been created. **Do not deploy on existing Zeus or Lucy production hosts while their holds remain in effect.** See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) and [QA_EVIDENCE.md](QA_EVIDENCE.md) for evidence and unverified device checks.
+
+See [GAME_NIGHT_1_1.md](GAME_NIGHT_1_1.md) for the new features, rules preservation and acceptance criteria.
 
 ## Run the standalone game
 
@@ -44,9 +46,10 @@ Commands for tests and builds are in the next section.
 
 ## Build, tests and source
 
-- `npm test` — pure rules-engine tests and isolated service-worker simulation (Node 18+; no dependency install needed).
+- `npm test` — pure rules-engine, Game Night, and isolated service-worker simulation tests (Node 18+; no dependency install needed).
 - `python3 scripts/build_site.py && node --test tests/release.test.mjs` — create/verify the allowlisted website in `site/`.
 - `python3 build.py` — regenerate the offline single-file `play.html`.
+- `python3 tests/game_night_ui.py` — Game Night handoffs, round lengths, save portability, and human trade UI tests using a standalone HTML page. Requires Playwright and Chromium; on locked-down browsers it tests an embedded page with simulated storage, not true `file://` navigation.
 - `python3 tests/mobile_embed.py` — UI tests in Chromium using a standalone HTML page; requires `pip install playwright` and installed Chromium.
 - `python3 tests/pwa_launch.py` — **requires an unrestricted local browser**; tests actual HTTP-served PWA manifest, service worker, offline restart, browser-save reload, mobile trading and CSP. Run before approval to publish if possible, then repeat equivalent tests at the final HTTPS URL.
 
@@ -54,7 +57,7 @@ Only ten allowlisted web assets enter the hosted bundle. `play.html`, source tes
 
 ## Saving and updates
 
-Saves use `localStorage` under `blockclub.game.v1`. The app version is **1.0.1** and the save schema is **1**, preserving compatible 1.0.0 saves **on the same origin and storage partition**. Saved games do not sync between devices or domains, and may disappear if a browser clears site data or storage is evicted. Opening a local HTML file and later switching to a GitHub Pages URL does **not** transfer saves. A new game intentionally replaces the previous saved game.
+Saves use `localStorage` under `blockclub.game.v1`. The app release is **1.1.0**, and the save schema remains **1**, preserving compatible 1.0.x saves on the same origin/storage partition. A portable JSON export/import now supports manual device-to-device transfer. Saved games do not sync between devices or domains, and may disappear if a browser clears site data or storage is evicted. Opening a local HTML file and later switching to a GitHub Pages URL does **not** automatically transfer saves; export/import the save file to move it manually. A new game intentionally replaces the previous saved game.
 
 The service worker uses a versioned, app-path-specific cache and precaches the site so subsequent visits can load without internet. Initial installation requires a secure HTTPS origin and an online visit to populate that cache. Real-device installation and airplane-mode behavior remain release acceptance gates.
 

@@ -14,3 +14,35 @@
 
 .zoom-close{display:none}.board-frame.board-zoom{position:fixed;z-index:40;inset:0;max-width:none;width:100vw;min-height:100dvh;background:#c6d6c7;padding:70px 12px 20px;overflow:auto;overscroll-behavior:contain;border-radius:0;box-shadow:0 0 0 100vmax rgba(3,23,17,.84)}.board-frame.board-zoom .zoom-close{position:fixed;top:calc(15px + env(safe-area-inset-top));right:20px;z-index:45;display:flex;align-items:center;justify-content:center;background:#164c3c;color:#fff;min-height:42px;padding:0 14px;border-radius:10px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700}.board-frame.board-zoom .board{width:max(670px, min(90vh,840px));min-width:670px;height:max(670px,min(90vh,840px));margin:auto}.board-frame.board-zoom .tile-label{font-size:10px}.board-frame.board-zoom .tile-price{font-size:9px}.board-frame.board-zoom .tile-glyph{font-size:21px}.board-frame.board-zoom .center-title{font-size:100px}.board-frame.board-zoom .tile-tokens i{width:14px;height:14px;font-size:10px}
 @media(max-width:740px){.hero-illustration{display:none}}
+
+/* Game Night 1.1: private handoffs, round settings, portable saves and optional motion */
+.choice-row{grid-template-columns:repeat(4,minmax(0,1fr))}
+.choice-row .choice{min-width:0}
+.round-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:13px 0 19px}
+.round-choices .choice{min-height:42px;font-size:12px}
+.setup-tools{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-top:15px}
+.setup-tools button{font-size:12px;text-decoration:underline;background:transparent;color:var(--pine3);font-weight:700;padding:5px}
+.action-tools{flex-wrap:wrap;gap:5px;justify-content:space-evenly}
+.action-tools button{flex:1 1 27%;min-height:42px;padding:7px 6px}
+.trade-review{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 18px}
+.trade-review div{background:rgba(255,255,255,.1);border-radius:11px;padding:15px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.trade-review small{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#c6d2c6}
+.trade-review strong{overflow-wrap:anywhere;font-size:15px}
+.handoff-shell{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(circle at 30% 20%,#235b4b 0%,#0b2b25 55%,#081b18 100%);color:#fffbed}
+.handoff-card{width:min(440px,100%);padding:38px 28px;background:#fdfbf2;color:var(--pine);box-shadow:0 30px 75px rgba(0,0,0,.3);border-radius:23px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px}
+.handoff-card .eyebrow{font-size:10px;letter-spacing:.16em;color:#548171}
+.handoff-icon{display:grid;place-items:center;width:85px;height:85px;border-radius:22px;background:#d8e8d9;color:#285b47;font-size:42px}
+.handoff-card h1{font-family:'Space Grotesk',system-ui,sans-serif;font-size:clamp(29px,7vw,41px);letter-spacing:-.05em;line-height:1.1;overflow-wrap:anywhere;margin:4px 0 0}
+.handoff-card p{line-height:1.65;font-size:14px;max-width:300px;color:#668278;margin:0}
+.handoff-card .start-button{width:100%;margin:10px 0 0}
+.handoff-card small{color:#779088;letter-spacing:.1em;font-size:10px}
+body:not(.motion-off) .tile.landed{animation:clubTilePulse .8s ease-out}
+body:not(.motion-off) .tile.landed .tile-tokens{animation:clubTokenPop .65s cubic-bezier(.22,1.5,.4,1)}
+body:not(.motion-off) .score.active{animation:clubScoreGlow .65s ease-out}
+body:not(.motion-off) .action-primary:not(:disabled):active{transform:scale(.965)}
+@keyframes clubTilePulse{0%{filter:brightness(1.3);box-shadow:0 0 0 5px rgba(211,169,100,.8)}100%{filter:brightness(1);box-shadow:none}}
+@keyframes clubTokenPop{0%{transform:scale(.55)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
+@keyframes clubScoreGlow{0%{filter:brightness(1.25)}100%{filter:brightness(1)}}
+body.motion-off *,body.motion-off *::before,body.motion-off *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media(prefers-reduced-motion:reduce){.tile.landed,.tile.landed .tile-tokens,.score.active{animation:none!important}}
+@media(max-width:740px){.handoff-card{padding:28px 20px}.choice-row{gap:7px}.choice-row .choice{min-height:49px;font-size:17px}.trade-review{grid-template-columns:1fr}}
